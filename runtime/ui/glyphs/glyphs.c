@@ -117,6 +117,75 @@ static int deck_src(int i, const InputMap *map) {
     return pad > PAD_NONE && pad < PAD_COUNT ? k_deck_pad[pad] : -1;
 }
 
+// A deck_sheet.png cell in top-down order (CELL x CELL RGBA8): the sheet's rows are the game's bottom-up ones.
+static void deck_cell(const uint8_t *deck, int src, uint8_t *out) {
+    int sx0 = (src % 9) * PITCH, sy0 = (src / 9) * PITCH;
+    for (int y = 0; y < CELL; y++)
+        memcpy(out + (size_t)y * CELL * 4,
+               deck + (size_t)(SHEET - sy0 - 1 - y) * SHEET * 4 + (size_t)sx0 * 4, CELL * 4);
+}
+
+// Scale a cell's picture (top-down, as deck_cell) into the game glyph's box, one pixel inside it, as the RomFS mods
+// do: the picture is cropped to its opaque pixels first, so it neither grows past the quad nor gets clipped at its
+// right edge, and keeps its aspect. Bilinear, weighted by alpha so transparent texels do not darken the edge.
+// 0 when there was nothing to draw.
+static int deck_fit(const uint8_t *art, int bx0, int by0, int bx1, int by1, uint8_t *cell) {
+    int lx0 = CELL, ly0 = CELL, lx1 = -1, ly1 = -1;
+    for (int y = 0; y < CELL; y++)
+        for (int x = 0; x < CELL; x++)
+            if (art[((size_t)y * CELL + x) * 4 + 3] > 8) {
+                if (x < lx0) lx0 = x;
+                if (x > lx1) lx1 = x;
+                if (y < ly0) ly0 = y;
+                if (y > ly1) ly1 = y;
+            }
+    int dw = bx1 - bx0 - 1, dh = by1 - by0 - 1;   // one pixel inside the glyph's box, as the mods do
+    if (lx1 < 0 || dw < 1 || dh < 1) return 0;
+    int lw = lx1 - lx0 + 1, lh = ly1 - ly0 + 1;
+    float scale = (float)dw / lw < (float)dh / lh ? (float)dw / lw : (float)dh / lh;
+    int nw = (int)(lw * scale + 0.5f), nh = (int)(lh * scale + 0.5f);
+    if (nw < 1) nw = 1;
+    if (nh < 1) nh = 1;
+    int dx = (bx0 + bx1 + 1) / 2 - nw / 2, dy = (by0 + by1 + 1) / 2 - nh / 2;
+    memset(cell, 0, (size_t)CELL * CELL * 4);
+    for (int y = 0; y < nh; y++) {
+        int cy = dy + y;
+        if (cy < 0 || cy >= CELL) continue;
+        float fy = (y + 0.5f) * lh / nh + ly0 - 0.5f;
+        int iy = (int)fy;
+        if (iy < ly0) iy = ly0;
+        if (iy >= ly1) iy = ly1 > ly0 ? ly1 - 1 : ly0;
+        float ty = fy - iy;
+        if (ty < 0) ty = 0;
+        if (ty > 1) ty = 1;
+        int iy2 = iy + 1 <= ly1 ? iy + 1 : iy;
+        for (int x = 0; x < nw; x++) {
+            int cx = dx + x;
+            if (cx < 0 || cx >= CELL) continue;
+            float fx = (x + 0.5f) * lw / nw + lx0 - 0.5f;
+            int ix = (int)fx;
+            if (ix < lx0) ix = lx0;
+            if (ix >= lx1) ix = lx1 > lx0 ? lx1 - 1 : lx0;
+            float tx = fx - ix;
+            if (tx < 0) tx = 0;
+            if (tx > 1) tx = 1;
+            int ix2 = ix + 1 <= lx1 ? ix + 1 : ix;
+            const uint8_t *p00 = art + ((size_t)iy * CELL + ix) * 4, *p10 = art + ((size_t)iy * CELL + ix2) * 4;
+            const uint8_t *p01 = art + ((size_t)iy2 * CELL + ix) * 4, *p11 = art + ((size_t)iy2 * CELL + ix2) * 4;
+            float w00 = (1 - tx) * (1 - ty), w10 = tx * (1 - ty), w01 = (1 - tx) * ty, w11 = tx * ty;
+            float aw = p00[3] * w00 + p10[3] * w10 + p01[3] * w01 + p11[3] * w11;   // alpha, 0..255
+            uint8_t *d = cell + ((size_t)cy * CELL + cx) * 4;
+            if (aw > 0.5f) {
+                for (int k = 0; k < 3; k++)
+                    d[k] = (uint8_t)((p00[k] * p00[3] * w00 + p10[k] * p10[3] * w10 + p01[k] * p01[3] * w01 +
+                                      p11[k] * p11[3] * w11) / aw + 0.5f);
+            }
+            d[3] = (uint8_t)(aw + 0.5f);
+        }
+    }
+    return 1;
+}
+
 uint32_t glyphs_generation(void) {
     int kind = glyphs_kind();
     InputMap m;
@@ -305,37 +374,47 @@ int glyphs_apply(uint64_t addr, int format, uint32_t w, uint32_t h, uint8_t *lin
     static GlyphCanvas cv;
     static const GlyphLook look = {{245, 245, 245}, {120, 120, 120}, {0, 0, 0}, 0.3f, 4};
     const uint8_t *deck = kind == GLYPHS_DECK ? glyph_deck_sheet() : NULL;
+    static uint8_t art[CELL * CELL * 4];
     uint8_t cell[CELL * CELL * 4];
     int drawn = 0;
     for (int i = 0; i < 40; i++) {
         int x0 = (i % 9) * PITCH, y0 = (i / 9) * PITCH;   // top-down cell origin; rows are stored bottom-up
-        int src = deck ? deck_src(i, &g_map) : -1;
-        if (src >= 0) {   // deck_sheet.png is in the same grid and row order: copy that cell as is
-            int sx0 = (src % 9) * PITCH, sy0 = (src / 9) * PITCH;
-            for (int y = 0; y < CELL; y++) {
-                // y counts the rows of the cell in the bottom-up buffer (row 0 of the cell is its visual bottom)
-                size_t rs = (size_t)(SHEET - sy0 - CELL + y), rd = (size_t)(SHEET - y0 - CELL + y);
-                memcpy(lin + rd * row + (size_t)x0 * 4, deck + rs * SHEET * 4 + (size_t)sx0 * 4, CELL * 4);
-            }
-            drawn++;
-            continue;
-        }
-        // the game's glyph box (its opaque pixels), so ours keeps its size and place
+        // the game's glyph box (its opaque pixels) and, looser, the room its outline takes: the RomFS icon mods fit
+        // their pictures in the latter, so the game's quad never clips them (the Deck art was cut at the right edge)
         int bx0 = CELL, by0 = CELL, bx1 = -1, by1 = -1;
+        int gx0 = CELL, gy0 = CELL, gx1 = -1, gy1 = -1;
         for (int y = 0; y < CELL; y++)
-            for (int x = 0; x < CELL; x++)
-                if (g_orig[((size_t)(SHEET - 1 - (y0 + y)) * SHEET + x0 + x) * 4 + 3] > 200) {
+            for (int x = 0; x < CELL; x++) {
+                int a = g_orig[((size_t)(SHEET - 1 - (y0 + y)) * SHEET + x0 + x) * 4 + 3];
+                if (a > 200) {
                     if (x < bx0) bx0 = x;
                     if (x > bx1) bx1 = x;
                     if (y < by0) by0 = y;
                     if (y > by1) by1 = y;
                 }
-        if (bx1 < 0) continue;
-        GlyphBox b = {(bx0 + bx1 + 1) / 2.0f, (by0 + by1 + 1) / 2.0f, (float)(by1 - by0 + 1), (float)(bx1 - bx0 + 1)};
-        memset(&cv, 0, sizeof cv);
-        cv.size = CELL;
-        if (!draw_cell(&cv, b, k_cells[i], kind, &g_map)) continue;
-        glyph_compose(&cv, cell, CELL * 4, &look);
+                if (a > 40) {
+                    if (x < gx0) gx0 = x;
+                    if (x > gx1) gx1 = x;
+                    if (y < gy0) gy0 = y;
+                    if (y > gy1) gy1 = y;
+                }
+            }
+        if (bx1 < 0 && gx1 < 0) continue;
+        int src = deck ? deck_src(i, &g_map) : -1;
+        int done = 0;
+        if (src >= 0 && gx1 >= 0) {
+            deck_cell(deck, src, art);
+            done = deck_fit(art, gx0, gy0, gx1, gy1, cell);
+        }
+        if (!done) {
+            if (bx1 < 0) continue;
+            GlyphBox b = {(bx0 + bx1 + 1) / 2.0f, (by0 + by1 + 1) / 2.0f, (float)(by1 - by0 + 1),
+                          (float)(bx1 - bx0 + 1)};
+            memset(&cv, 0, sizeof cv);
+            cv.size = CELL;
+            if (!draw_cell(&cv, b, k_cells[i], kind, &g_map)) continue;
+            glyph_compose(&cv, cell, CELL * 4, &look);
+        }
         for (int y = 0; y < CELL; y++)
             memcpy(lin + (size_t)(SHEET - 1 - (y0 + y)) * row + (size_t)x0 * 4, cell + (size_t)y * CELL * 4, CELL * 4);
         drawn++;
