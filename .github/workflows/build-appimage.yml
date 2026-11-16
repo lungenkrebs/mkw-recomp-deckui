@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: ccache in the checkout, kept between runs
         run: echo "CCACHE_DIR=$PWD/.ccache" >> "$GITHUB_ENV"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .ccache
           key: ccache-appimage-${{ github.sha }}
@@ -44,7 +44,7 @@ jobs:
           mkdir -p scratchpad/vma
           curl -sSfL -o scratchpad/vma/vk_mem_alloc.h "$VMA_URL"
           echo "$VMA_SHA256  scratchpad/vma/vk_mem_alloc.h" | sha256sum -c -
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: build/sysroot
           key: sysroot-${{ hashFiles('tools/build/sysroot.py') }}
