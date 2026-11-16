@@ -60,20 +60,21 @@ static void dpad(ImDrawList *dl, ImVec2 c, float s, int dir) {
 }
 
 bool pad_icon_draw(ImDrawList *dl, ImVec2 c, float s, int pad, int kind) {
-    if (kind != GLYPHS_XBOX && kind != GLYPHS_PLAYSTATION) return false;
-    bool ps = kind == GLYPHS_PLAYSTATION;
+    if (kind != GLYPHS_XBOX && kind != GLYPHS_PLAYSTATION && kind != GLYPHS_DECK) return false;
+    bool ps = kind == GLYPHS_PLAYSTATION, deck = kind == GLYPHS_DECK;
     static const char *const xbox[] = {"A", "B", "X", "Y"};
     switch (pad) {
     case PAD_SOUTH: case PAD_EAST: case PAD_WEST: case PAD_NORTH:
+        // Steam Deck's face buttons are letters, like Xbox's
         if (ps) ps_face(dl, c, s, pad - PAD_SOUTH);
         else round_button(dl, c, s, xbox[pad - PAD_SOUTH]);
         return true;
-    case PAD_L: tab_button(dl, c, s, ps ? "L1" : "LB"); return true;
-    case PAD_R: tab_button(dl, c, s, ps ? "R1" : "RB"); return true;
-    case PAD_ZL: tab_button(dl, c, s, ps ? "L2" : "LT"); return true;
-    case PAD_ZR: tab_button(dl, c, s, ps ? "R2" : "RT"); return true;
-    case PAD_LSTICK: round_button(dl, c, s, ps ? "L3" : "LS"); return true;
-    case PAD_RSTICK: round_button(dl, c, s, ps ? "R3" : "RS"); return true;
+    case PAD_L: tab_button(dl, c, s, (ps || deck) ? "L1" : "LB"); return true;
+    case PAD_R: tab_button(dl, c, s, (ps || deck) ? "R1" : "RB"); return true;
+    case PAD_ZL: tab_button(dl, c, s, (ps || deck) ? "L2" : "LT"); return true;
+    case PAD_ZR: tab_button(dl, c, s, (ps || deck) ? "R2" : "RT"); return true;
+    case PAD_LSTICK: round_button(dl, c, s, (ps || deck) ? "L3" : "LS"); return true;
+    case PAD_RSTICK: round_button(dl, c, s, (ps || deck) ? "R3" : "RS"); return true;
     case PAD_START: tab_button(dl, c, s, ps ? "OPT" : "MENU"); return true;
     case PAD_BACK: tab_button(dl, c, s, ps ? "SHR" : "VIEW"); return true;
     case PAD_DPAD_UP: case PAD_DPAD_DOWN: case PAD_DPAD_LEFT: case PAD_DPAD_RIGHT: dpad(dl, c, s, pad); return true;

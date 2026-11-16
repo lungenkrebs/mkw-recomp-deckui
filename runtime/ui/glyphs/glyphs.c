@@ -9,7 +9,8 @@
 // branch exp/recorder, MIT), where BOTW's sheet is a BC4 font; the shapes are its (ui/glyphs/glyph_draw.c).
 //
 // The icons follow the bindings (input_map.h): the cell of Switch A shows the controller button or the key that presses
-// A now. Nothing of Nintendo's ships: Xbox and PlayStation buttons, keycaps and mice are drawn, labels set in Roboto.
+// A now. Nothing of Nintendo's ships: Xbox, PlayStation and Steam Deck buttons, keycaps and mice are drawn, labels set
+// in Roboto.
 //
 // MKW_GLYPH_DUMP=<dir>: every RGBA8 1024x1024 upload is saved as <dir>/glyph_<addr>.rgba (raw rows, as uploaded) with
 // its hash in the log, and the redrawn sheet beside it as glyph_<addr>_<kind>.rgba.
@@ -60,11 +61,14 @@ int glyphs_kind(void) {
     if (!strcmp(s, "nintendo")) return GLYPHS_NINTENDO;
     if (!strcmp(s, "xbox")) return GLYPHS_XBOX;
     if (!strcmp(s, "playstation")) return GLYPHS_PLAYSTATION;
+    if (!strcmp(s, "steamdeck")) return GLYPHS_DECK;
     if (!strcmp(s, "keyboard")) return GLYPHS_KEYBOARD;
     if (input_last_device() == INPUT_DEVICE_KEYBOARD) return GLYPHS_KEYBOARD;
     int south = input_pad_label(PAD_SOUTH), east = input_pad_label(PAD_EAST);
     if (south == PAD_LABEL_CROSS) return GLYPHS_PLAYSTATION;
     if (east == PAD_LABEL_A) return GLYPHS_NINTENDO;
+    // A Steam Deck reports Xbox labels (A/B/X/Y), so the machine decides: its own prompts in Game Mode.
+    if (cfg_on_steam_deck()) return GLYPHS_DECK;
     return GLYPHS_XBOX;
 }
 
@@ -151,23 +155,26 @@ static void key_icon(GlyphCanvas *c, GlyphBox b, int key) {
     else glyph_keycap(c, b, l, dir);
 }
 
-// A controller button as an Xbox or PlayStation icon (pad: input_map.h PAD_*)
-static void pad_icon(GlyphCanvas *c, GlyphBox b, int pad, int ps) {
+// A controller button as an Xbox, PlayStation or Steam Deck icon (pad: input_map.h PAD_*)
+static void pad_icon(GlyphCanvas *c, GlyphBox b, int pad, int kind) {
     static const char *const xbox[] = {"A", "B", "X", "Y"};
     static const int psface[] = {GLYPH_PS_CROSS, GLYPH_PS_CIRCLE, GLYPH_PS_SQUARE, GLYPH_PS_TRIANGLE};
+    int ps = kind == GLYPHS_PLAYSTATION, deck = kind == GLYPHS_DECK;
     switch (pad) {
     case PAD_SOUTH: case PAD_EAST: case PAD_WEST: case PAD_NORTH:
+        // Steam Deck's face buttons are letters, like Xbox's
         if (ps) glyph_ps_face(c, b, psface[pad - PAD_SOUTH]);
         else glyph_round(c, b, xbox[pad - PAD_SOUTH]);
         return;
-    case PAD_L: glyph_tab(c, b, ps ? "L1" : "LB"); return;
-    case PAD_R: glyph_tab(c, b, ps ? "R1" : "RB"); return;
-    case PAD_ZL: glyph_tab(c, b, ps ? "L2" : "LT"); return;
-    case PAD_ZR: glyph_tab(c, b, ps ? "R2" : "RT"); return;
+    case PAD_L: glyph_tab(c, b, (ps || deck) ? "L1" : "LB"); return;
+    case PAD_R: glyph_tab(c, b, (ps || deck) ? "R1" : "RB"); return;
+    case PAD_ZL: glyph_tab(c, b, (ps || deck) ? "L2" : "LT"); return;
+    case PAD_ZR: glyph_tab(c, b, (ps || deck) ? "R2" : "RT"); return;
+    // Deck's Menu and View are the same three lines / two overlapping squares as Xbox's
     case PAD_START: glyph_menu_button(c, b, 1, ps); return;
     case PAD_BACK: glyph_menu_button(c, b, 0, ps); return;
-    case PAD_LSTICK: glyph_round(c, b, ps ? "L3" : "LS"); return;
-    case PAD_RSTICK: glyph_round(c, b, ps ? "R3" : "RS"); return;
+    case PAD_LSTICK: glyph_round(c, b, (ps || deck) ? "L3" : "LS"); return;
+    case PAD_RSTICK: glyph_round(c, b, (ps || deck) ? "R3" : "RS"); return;
     case PAD_DPAD_UP: glyph_dpad(c, b, GLYPH_UP); return;
     case PAD_DPAD_DOWN: glyph_dpad(c, b, GLYPH_DOWN); return;
     case PAD_DPAD_LEFT: glyph_dpad(c, b, GLYPH_LEFT); return;
@@ -190,7 +197,7 @@ static const int k_dpad_action[4] = {B_UP, B_DOWN, B_LEFT, B_RIGHT};   // GLYPH_
 
 // The cell's icon for kind; 0: keep the game's
 static int draw_cell(GlyphCanvas *c, GlyphBox b, Meaning m, int kind, const InputMap *map) {
-    int ps = kind == GLYPHS_PLAYSTATION;
+    int ps = kind == GLYPHS_PLAYSTATION, deck = kind == GLYPHS_DECK;
     if (kind == GLYPHS_KEYBOARD) {
         switch (m.kind) {
         case G_BUTTON: key_icon(c, b, key_of(map, m.arg)); return 1;
@@ -219,9 +226,9 @@ static int draw_cell(GlyphCanvas *c, GlyphBox b, Meaning m, int kind, const Inpu
     }
     if (kind == GLYPHS_NINTENDO) return 0;   // the game's own (a Switch layout)
     switch (m.kind) {
-    case G_BUTTON: pad_icon(c, b, pad_of(map, m.arg), ps); return 1;
+    case G_BUTTON: pad_icon(c, b, pad_of(map, m.arg), kind); return 1;
     case G_FACE: face_icon(c, b, m.arg == 0xff ? 0xff : pad_of(map, m.arg)); return 1;
-    case G_STICK_PRESS: glyph_round(c, b, m.arg ? (ps ? "R3" : "RS") : (ps ? "L3" : "LS")); return 1;
+    case G_STICK_PRESS: glyph_round(c, b, m.arg ? ((ps || deck) ? "R3" : "RS") : ((ps || deck) ? "L3" : "LS")); return 1;
     case G_DPAD: glyph_dpad(c, b, m.arg); return 1;
     default: return 0;   // the sticks: the game's (L / R on a stick)
     }
@@ -293,7 +300,7 @@ int glyphs_apply(uint64_t addr, int format, uint32_t w, uint32_t h, uint8_t *lin
             memcpy(lin + (size_t)(SHEET - 1 - (y0 + y)) * row + (size_t)x0 * 4, cell + (size_t)y * CELL * 4, CELL * 4);
         drawn++;
     }
-    static const char *const names[] = {"_nintendo", "_xbox", "_playstation", "_keyboard"};
+    static const char *const names[] = {"_nintendo", "_xbox", "_playstation", "_keyboard", "_deck"};
     rt_log("glyphs: button sheet %#llx: %s icons, %d cells redrawn", (unsigned long long)addr, names[kind] + 1, drawn);
     dump(names[kind], addr, lin, row);
     return 1;

@@ -119,7 +119,7 @@ static const CfgMeta metas[] = {
     {"VOLUME", "100", "0..100", LIVE}, {"AUDIO_CHANNELS", "auto", "auto|2|6", RESTART}, {"BACKGROUND_MUTE", "0", "0|1", LIVE},
     {"MOTION", "1", "0|1", LIVE}, {"RUMBLE_STRENGTH", "130", "0..300", LIVE}, {"RUMBLE_CURVE", "0.6", "0.2..1.5", LIVE},
     {"RUMBLE_TRIGGERS", "0", "0|1", LIVE}, {"PAD_LAYOUT", "auto", "auto|nintendo|xbox", LIVE},
-    {"BUTTON_ICONS", "auto", "auto|nintendo|xbox|playstation|keyboard", LIVE},
+    {"BUTTON_ICONS", "auto", "auto|nintendo|xbox|steamdeck|playstation|keyboard", LIVE},
     {"MOUSE_SENS", "1", "0..10", LIVE}, {"STICK_DEADZONE", "8", "0..40", LIVE}, {"SWITCH2", "0", "0|1|2", RESTART},
     {"MENU_LANG", "", "en|ja|fr|de|it|es|nl|pt|pt-BR|ru|zh-Hans|zh-Hant|ko|es-419|ca|gl|eu|pl|tr|uk|th", LIVE}, {"UPDATE_CHECK", "1", "0|1", LIVE},
     {"DISCORD", "0", "0|1", LIVE},   // Discord Rich Presence (core/presence): off by default, the player's friends see it
@@ -249,13 +249,21 @@ static int read_line(const char *path, char *out, size_t n) {
 }
 
 // The Steam Deck: Valve's board, product Jupiter or Galileo (/sys/class/dmi/id); SteamDeck=1, which Steam sets on it.
-static int on_steam_deck(void) {
+int cfg_on_steam_deck(void) {
+    static int deck = -1;
+    int d = __atomic_load_n(&deck, __ATOMIC_ACQUIRE);
+    if (d >= 0) return d;
     const char *env = getenv("SteamDeck");
-    if (env && !strcmp(env, "1")) return 1;
-    char vendor[64], product[64];
-    return read_line("/sys/class/dmi/id/board_vendor", vendor, sizeof vendor) && !strcmp(vendor, "Valve") &&
-           read_line("/sys/class/dmi/id/product_name", product, sizeof product) &&
-           (!strcmp(product, "Jupiter") || !strcmp(product, "Galileo"));
+    if (env && !strcmp(env, "1")) {
+        d = 1;
+    } else {
+        char vendor[64], product[64];
+        d = read_line("/sys/class/dmi/id/board_vendor", vendor, sizeof vendor) && !strcmp(vendor, "Valve") &&
+            read_line("/sys/class/dmi/id/product_name", product, sizeof product) &&
+            (!strcmp(product, "Jupiter") || !strcmp(product, "Galileo"));
+    }
+    __atomic_store_n(&deck, d, __ATOMIC_RELEASE);
+    return d;
 }
 
 static const char *raw_get(const char *name);
@@ -266,7 +274,7 @@ static int profile_of(void) {
     const char *set = raw_get(PREFIX "DEVICE_PROFILE");
     if (set && !strcmp(set, "deck")) p = 1;
     else if (set && *set && strcmp(set, "auto")) p = 0;
-    else p = on_steam_deck();
+    else p = cfg_on_steam_deck();
     __atomic_store_n(&profile, p, __ATOMIC_RELEASE);
     return p;
 }

@@ -808,6 +808,10 @@ msgctxt "UI_MENU_ICONS_PLAYSTATION"
 msgid "PlayStation"
 msgstr "PlayStation"
 
+msgctxt "UI_MENU_ICONS_STEAM_DECK"
+msgid "Steam Deck"
+msgstr ""
+
 msgctxt "UI_MENU_ICONS_KEYBOARD"
 msgid "Keyboard"
 msgstr "Teclado"

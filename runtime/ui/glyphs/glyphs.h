@@ -11,9 +11,9 @@ extern "C" {
 // or not it changed it), so the caller can upload it again when glyphs_generation changes.
 int glyphs_apply(uint64_t addr, int format, uint32_t w, uint32_t h, uint8_t *lin, uint32_t row);
 
-// The icons in effect: MKW_BUTTON_ICONS, or with "auto" the device used last (input_last_device) and the controller's
-// labels. Any thread.
-enum { GLYPHS_NINTENDO, GLYPHS_XBOX, GLYPHS_PLAYSTATION, GLYPHS_KEYBOARD };
+// The icons in effect: MKW_BUTTON_ICONS, or with "auto" the device used last (input_last_device), the controller's
+// labels and whether the machine is a Steam Deck. Any thread.
+enum { GLYPHS_NINTENDO, GLYPHS_XBOX, GLYPHS_PLAYSTATION, GLYPHS_KEYBOARD, GLYPHS_DECK };
 int glyphs_kind(void);
 
 // Changes whenever the icons to draw change (device, controller, bindings, setting); polled by the upload path.

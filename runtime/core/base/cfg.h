@@ -6,6 +6,10 @@
 // is kept). A name without the MKW_ prefix goes to getenv unchanged. Safe from any thread once cfg_init has returned.
 const char *cfg_get(const char *name);
 
+// 1 when running on a Steam Deck (Valve's Jupiter/Galileo board, or SteamDeck=1 as Steam sets it in Game Mode); used
+// to pick Steam Deck button icons automatically. Any thread after cfg_init.
+int cfg_on_steam_deck(void);
+
 // Reads mkw.ini once, before settings are read. The external game library needs the installation path before
 // mem_init can claim its address space. Logs the file, its key count, unknown keys and environment overrides.
 void cfg_init(void);
