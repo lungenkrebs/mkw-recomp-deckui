@@ -234,8 +234,13 @@ int cfg_load(const char *path) {
 // passes of that size taking 16 of the GPU's 42 ms a frame (MKW_PASS_TIMING with MKW_VK_RECORDER=0). With 720 they
 // go: race median 36.3 -> 23.4 ms (time trial, low quality preset, UMA 1 GB, 13/11/2026), 35.7 -> 24.6 ms without the
 // timing; a docked Deck on a large screen can pick a higher one in the menu.
+// The quality rows: the menu's Medium preset, not the console's docked one (full textures, 3072 shadows). The Deck's
+// 8 CUs at 720p are bandwidth-bound, and half textures (sampled one mip down) and 2048 shadows cost little at that
+// size. Every value is a Graphics row, so a player who wants the console look sets Console there and wins: the profile
+// only fills the keys mkw.ini does not set.
 static const struct { const char *key, *value; } DECK[] = {
     {"FULLSCREEN", "1"}, {"WINDOW_SIZE", "1280x800"}, {"VK_PRESENT", "fifo"}, {"RESOLUTION", "720"},
+    {"TEX_QUALITY", "half"}, {"DETAIL_DISTANCE", "1.5"}, {"SHADOW_SIZE", "2048"},
 };
 static int profile = -1;   // 0 none, 1 Steam Deck
 
