@@ -29,7 +29,7 @@ jobs:
     steps:
       - name: Tools
         run: pacman -Syu --noconfirm --needed git ccache clang lld llvm ninja make cmake pkgconf expat binutils uv python
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: ccache in the checkout, kept between runs
         run: echo "CCACHE_DIR=$PWD/.ccache" >> "$GITHUB_ENV"
       - uses: actions/cache@v4
