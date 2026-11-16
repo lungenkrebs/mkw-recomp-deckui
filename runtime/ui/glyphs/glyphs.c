@@ -10,7 +10,8 @@
 //
 // The icons follow the bindings (input_map.h): the cell of Switch A shows the controller button or the key that presses
 // A now. Nothing of Nintendo's ships: Xbox, PlayStation and Steam Deck buttons, keycaps and mice are drawn, labels set
-// in Roboto.
+// in Roboto. Steam Deck is the exception: its prompts are Xelu's CC0 Steam Deck set, embedded as deck_sheet.png
+// (ui/glyphs/deck_sheet.c) and blitted into the cells, so the native style matches the RomFS mods.
 //
 // MKW_GLYPH_DUMP=<dir>: every RGBA8 1024x1024 upload is saved as <dir>/glyph_<addr>.rgba (raw rows, as uploaded) with
 // its hash in the log, and the redrawn sheet beside it as glyph_<addr>_<kind>.rgba.
@@ -87,6 +88,33 @@ static int key_of(const InputMap *m, int action) {
     for (int i = 0; i < m->nkeys; i++)
         if (m->keys[i].action == action) return m->keys[i].key;
     return KEY_NONE;
+}
+
+// The deck_sheet.png cell of each physical pad, -1 where it has no picture. The face buttons are therefore the pad's
+// own letter: with a Nintendo layout the cell of game A is the Deck's B, as the RomFS mods have it. The d-pad's
+// left/right and up/down, and the stick presses, are their cells.
+static const int8_t k_deck_pad[PAD_COUNT] = {
+    -1, 0, 1, 2, 3, 29, 31, 4, 5, 19, 20, 35, 33, 36, 34, 6, 7,
+};
+
+// The cell of deck_sheet.png to blit for game cell i, following the binding of its action; -1: draw it (the face
+// diamond, the two-direction d-pads) or keep the game's (SL/SR, a sideways Joy-Con's buttons, the controllers).
+static int deck_src(int i, const InputMap *map) {
+    static const uint8_t act[8] = {B_A, B_B, B_X, B_Y, B_L, B_R, B_ZL, B_ZR};
+    static const uint8_t dpad[4] = {B_UP, B_DOWN, B_LEFT, B_RIGHT};   // cells 33-36
+    int a;
+    if (i >= 0 && i <= 7) a = act[i];
+    else if (i == 19) a = B_PLUS;
+    else if (i == 20) a = B_MINUS;
+    else if (i == 29 || i == 30) a = B_STICK_L;
+    else if (i == 31) a = B_STICK_R;
+    else if (i >= 33 && i <= 36) a = dpad[i - 33];
+    else if (i == 26 || i == 27) return 26;   // the stick itself, not a button
+    else if (i == 28) return 28;
+    else if (i == 32) return 32;              // the d-pad as a whole
+    else return -1;
+    int pad = pad_of(map, a);
+    return pad > PAD_NONE && pad < PAD_COUNT ? k_deck_pad[pad] : -1;
 }
 
 uint32_t glyphs_generation(void) {
@@ -276,10 +304,22 @@ int glyphs_apply(uint64_t addr, int format, uint32_t w, uint32_t h, uint8_t *lin
     input_map_snapshot(&g_map);
     static GlyphCanvas cv;
     static const GlyphLook look = {{245, 245, 245}, {120, 120, 120}, {0, 0, 0}, 0.3f, 4};
+    const uint8_t *deck = kind == GLYPHS_DECK ? glyph_deck_sheet() : NULL;
     uint8_t cell[CELL * CELL * 4];
     int drawn = 0;
     for (int i = 0; i < 40; i++) {
         int x0 = (i % 9) * PITCH, y0 = (i / 9) * PITCH;   // top-down cell origin; rows are stored bottom-up
+        int src = deck ? deck_src(i, &g_map) : -1;
+        if (src >= 0) {   // deck_sheet.png is in the same grid and row order: copy that cell as is
+            int sx0 = (src % 9) * PITCH, sy0 = (src / 9) * PITCH;
+            for (int y = 0; y < CELL; y++) {
+                // y counts the rows of the cell in the bottom-up buffer (row 0 of the cell is its visual bottom)
+                size_t rs = (size_t)(SHEET - sy0 - CELL + y), rd = (size_t)(SHEET - y0 - CELL + y);
+                memcpy(lin + rd * row + (size_t)x0 * 4, deck + rs * SHEET * 4 + (size_t)sx0 * 4, CELL * 4);
+            }
+            drawn++;
+            continue;
+        }
         // the game's glyph box (its opaque pixels), so ours keeps its size and place
         int bx0 = CELL, by0 = CELL, bx1 = -1, by1 = -1;
         for (int y = 0; y < CELL; y++)

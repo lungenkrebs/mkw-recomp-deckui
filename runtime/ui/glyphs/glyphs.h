@@ -11,6 +11,10 @@ extern "C" {
 // or not it changed it), so the caller can upload it again when glyphs_generation changes.
 int glyphs_apply(uint64_t addr, int format, uint32_t w, uint32_t h, uint8_t *lin, uint32_t row);
 
+// The Steam Deck prompts (Xelu, CC0) in the game's glyph grid, 1024x1024 RGBA8, rows as the game stores them; NULL
+// when the embedded PNG could not be decoded. ui/glyphs/deck_sheet.c.
+const uint8_t *glyph_deck_sheet(void);
+
 // The icons in effect: MKW_BUTTON_ICONS, or with "auto" the device used last (input_last_device), the controller's
 // labels and whether the machine is a Steam Deck. Any thread.
 enum { GLYPHS_NINTENDO, GLYPHS_XBOX, GLYPHS_PLAYSTATION, GLYPHS_KEYBOARD, GLYPHS_DECK };
