@@ -237,13 +237,12 @@ int cfg_load(const char *path) {
 // The quality rows stay the console's: a 1.8.0 log on the Deck (17/11/2026) had the GPU at 8-14 ms of a 33 ms frame
 // and the CPU/replay at 24-36 ms, so half textures and 2048 shadows only cost image quality without moving the frame.
 // Every value is a Graphics row a player can still pick there; the profile only fills the keys mkw.ini does not set.
+//
+// Parallel replay is off, as 0.1.13 has it below 6 physical cores: tried on 17/11/2026 with one extra thread on the
+// Deck's 4 cores, and a 1.8.0 run fell from 30.0 fps mean / 22.5 1% low (the serial replay) to 23.8 / 12.6, worst
+// frames 100-190 ms, replay 30-60 ms. The upstream 2-player regression on the Deck holds for one player too.
 static const struct { const char *key, *value; } DECK[] = {
     {"FULLSCREEN", "1"}, {"WINDOW_SIZE", "1280x800"}, {"VK_PRESENT", "fifo"}, {"RESOLUTION", "720"},
-    // Experimental: the same log had the replay at 24-25 ms in the worst frames of a 33 ms budget while the GPU sat
-    // at 8-14 ms, so the recording is what the spikes wait on. 0.1.13 keeps this off below 6 physical cores because a
-    // 2-player Deck run lost 25.4 -> 22 fps before the serial head; with one player and the head, one extra recording
-    // thread is worth measuring. MKW_REPLAY_PAR=0 in mkw.ini turns it off.
-    {"REPLAY_PAR", "1"}, {"REPLAY_PAR_THREADS", "1"},
 };
 static int profile = -1;   // 0 none, 1 Steam Deck
 
