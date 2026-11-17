@@ -234,13 +234,16 @@ int cfg_load(const char *path) {
 // passes of that size taking 16 of the GPU's 42 ms a frame (MKW_PASS_TIMING with MKW_VK_RECORDER=0). With 720 they
 // go: race median 36.3 -> 23.4 ms (time trial, low quality preset, UMA 1 GB, 13/11/2026), 35.7 -> 24.6 ms without the
 // timing; a docked Deck on a large screen can pick a higher one in the menu.
-// The quality rows: the menu's Medium preset, not the console's docked one (full textures, 3072 shadows). The Deck's
-// 8 CUs at 720p are bandwidth-bound, and half textures (sampled one mip down) and 2048 shadows cost little at that
-// size. Every value is a Graphics row, so a player who wants the console look sets Console there and wins: the profile
-// only fills the keys mkw.ini does not set.
+// The quality rows stay the console's: a 1.8.0 log on the Deck (17/11/2026) had the GPU at 8-14 ms of a 33 ms frame
+// and the CPU/replay at 24-36 ms, so half textures and 2048 shadows only cost image quality without moving the frame.
+// Every value is a Graphics row a player can still pick there; the profile only fills the keys mkw.ini does not set.
 static const struct { const char *key, *value; } DECK[] = {
     {"FULLSCREEN", "1"}, {"WINDOW_SIZE", "1280x800"}, {"VK_PRESENT", "fifo"}, {"RESOLUTION", "720"},
-    {"TEX_QUALITY", "half"}, {"DETAIL_DISTANCE", "1.5"}, {"SHADOW_SIZE", "2048"},
+    // Experimental: the same log had the replay at 24-25 ms in the worst frames of a 33 ms budget while the GPU sat
+    // at 8-14 ms, so the recording is what the spikes wait on. 0.1.13 keeps this off below 6 physical cores because a
+    // 2-player Deck run lost 25.4 -> 22 fps before the serial head; with one player and the head, one extra recording
+    // thread is worth measuring. MKW_REPLAY_PAR=0 in mkw.ini turns it off.
+    {"REPLAY_PAR", "1"}, {"REPLAY_PAR_THREADS", "1"},
 };
 static int profile = -1;   // 0 none, 1 Steam Deck
 
